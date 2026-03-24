@@ -10,8 +10,8 @@
   "developer": "yallcode",
   "description": "A macro recorder and bot for Geometry Dash. Record your runs and play them back perfectly.",
   "links": {
-    "source": "https://github.com/yallcode/YallBot"
-  },
+    "source": "https://github.com/yallcode/YallBotMod"
+},
   "settings": {
     "show-ui-button": {
       "name": "Show Macro Button",
