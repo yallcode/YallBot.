@@ -1,4 +1,4 @@
-name: Build YallBot.
+name: Build YallBotMod
 
 on:
   push:
@@ -34,7 +34,7 @@ jobs:
         uses: geode-sdk/build-geode-mod@main
         with:
           path: mod
-          sdk: latest
+          sdk: v4.4.0
           combine: true
           target: ${{ matrix.config.target }}
 
@@ -49,5 +49,5 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: YallBot.geode
+          name: YallBotMod.geode
           path: ${{ steps.build.outputs.build-output }}
