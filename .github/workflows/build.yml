@@ -2,9 +2,9 @@ name: Build YallBot.
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "**" ]
   pull_request:
-    branches: [ main ]
+    branches: [ "**" ]
   workflow_dispatch:
 
 jobs:
@@ -15,41 +15,35 @@ jobs:
         config:
           - name: Windows
             os: windows-latest
-            target: win
           - name: Android32
             os: ubuntu-latest
-            target: android32
+            target: Android32
           - name: Android64
             os: ubuntu-latest
-            target: android64
+            target: Android64
 
-    name: Build (${{ matrix.config.name }})
+    name: ${{ matrix.config.name }}
     runs-on: ${{ matrix.config.os }}
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Geode CLI
-        uses: geode-sdk/cli/.github/actions/setup@main
-
-      - name: Setup Android NDK
-        if: matrix.config.target == 'android32' || matrix.config.target == 'android64'
-        uses: nttld/setup-ndk@v1
+      - name: Build the mod
+        uses: geode-sdk/build-geode-mod@main
         with:
-          ndk-version: r26b
-
-      - name: Setup Geode SDK
-        uses: geode-sdk/sdk/.github/actions/setup@main
-        with:
+          combine: true
           target: ${{ matrix.config.target }}
 
-      - name: Build
-        run: geode build --config Release
-        env:
-          GEODE_TARGET: ${{ matrix.config.target }}
+  package:
+    name: Package builds
+    runs-on: ubuntu-latest
+    needs: build
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+    steps:
+      - uses: geode-sdk/build-geode-mod/combine@main
+        id: build
+
+      - uses: actions/upload-artifact@v4
         with:
-          name: YallBot-${{ matrix.config.target }}
-          path: '*.geode'
+          name: YallBot.geode
+          path: ${{ steps.build.outputs.build-output }}
