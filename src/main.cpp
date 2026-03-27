@@ -14,8 +14,8 @@ class $modify(GJBaseGameLayer) {
         GJBaseGameLayer::handleButton(push, button, player1);
     }
 
-    void processCommands(float dt) {
-        GJBaseGameLayer::processCommands(dt);
+    void processCommands(float dt, bool isHalfTick, bool isLastTick) {
+        GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
         MacroManager::get().onFrameAdvance(this);
     }
 };
