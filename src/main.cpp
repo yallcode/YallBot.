@@ -48,10 +48,10 @@ class $modify(YallBotPauseLayer, PauseLayer) {
         CCLabelBMFont* statusLabel = nullptr;
     };
 
-    bool init(bool unfocused) {
-        if (!PauseLayer::init(unfocused)) return false;
+    void customSetup() {
+        PauseLayer::customSetup();
 
-        if (!Mod::get()->getSettingValue<bool>("show-ui-button")) return true;
+        if (!Mod::get()->getSettingValue<bool>("show-ui-button")) return;
 
         auto winSize = CCDirector::sharedDirector()->getWinSize();
 
@@ -86,7 +86,6 @@ class $modify(YallBotPauseLayer, PauseLayer) {
         menu->setZOrder(11);
         this->addChild(menu);
 
-        // Record / Play / Stop button
         auto actionLbl = CCLabelBMFont::create(
             this->getActionText().c_str(), "bigFont.fnt"
         );
@@ -96,7 +95,6 @@ class $modify(YallBotPauseLayer, PauseLayer) {
             menu_selector(YallBotPauseLayer::onToggle)
         );
 
-        // Clear button
         auto clearLbl = CCLabelBMFont::create("Clear", "bigFont.fnt");
         clearLbl->setScale(0.4f);
         auto clearBtn = CCMenuItemLabel::create(
@@ -108,8 +106,6 @@ class $modify(YallBotPauseLayer, PauseLayer) {
         menu->addChild(actionBtn);
         menu->addChild(clearBtn);
         menu->alignItemsHorizontallyWithPadding(12.f);
-
-        return true;
     }
 
     std::string getStatusText() {
