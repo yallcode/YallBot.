@@ -47,12 +47,10 @@ void MacroManager::onFrameAdvance(GJBaseGameLayer* layer) {
         while (playbackIndex < (int)inputs.size() &&
                inputs[playbackIndex].frame == currentFrame) {
             auto& inp = inputs[playbackIndex];
-            // Use handleButton instead of pushButton/releaseButton
             layer->handleButton(inp.down, inp.button, !inp.player2);
             playbackIndex++;
         }
     }
-
     if (state != BotState::Idle) {
         currentFrame++;
     }
@@ -70,11 +68,10 @@ std::string MacroManager::getSaveDir() {
     return dir.string();
 }
 
-bool MacroManager::saveMacro(const std::string& filename) {
-    std::string path = getSaveDir() + "/" + filename + ".ybot";
+bool MacroManager::saveMacro(const std::string& name) {
+    std::string path = getSaveDir() + "/" + name + ".ybot";
     std::ofstream file(path, std::ios::binary);
     if (!file.is_open()) return false;
-
     uint32_t count = (uint32_t)inputs.size();
     file.write(reinterpret_cast<char*>(&count), sizeof(count));
     for (auto& inp : inputs) {
@@ -86,11 +83,10 @@ bool MacroManager::saveMacro(const std::string& filename) {
     return true;
 }
 
-bool MacroManager::loadMacro(const std::string& filename) {
-    std::string path = getSaveDir() + "/" + filename + ".ybot";
+bool MacroManager::loadMacro(const std::string& name) {
+    std::string path = getSaveDir() + "/" + name + ".ybot";
     std::ifstream file(path, std::ios::binary);
     if (!file.is_open()) return false;
-
     inputs.clear();
     uint32_t count;
     file.read(reinterpret_cast<char*>(&count), sizeof(count));
@@ -103,4 +99,20 @@ bool MacroManager::loadMacro(const std::string& filename) {
         inputs.push_back(inp);
     }
     return true;
+}
+
+bool MacroManager::deleteMacro(const std::string& name) {
+    std::string path = getSaveDir() + "/" + name + ".ybot";
+    return std::filesystem::remove(path);
+}
+
+std::vector<std::string> MacroManager::getReplayList() {
+    std::vector<std::string> list;
+    std::string dir = getSaveDir();
+    for (auto& entry : std::filesystem::directory_iterator(dir)) {
+        if (entry.path().extension() == ".ybot") {
+            list.push_back(entry.path().stem().string());
+        }
+    }
+    return list;
 }
