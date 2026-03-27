@@ -2,15 +2,262 @@
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/PauseLayer.hpp>
+#include <Geode/ui/Popup.hpp>
 #include "MacroManager.hpp"
 
 using namespace geode::prelude;
+
+// ── YallBot Popup ─────────────────────────────────────────────────────────────
+
+class YallBotPopup : public geode::Popup<> {
+protected:
+    CCLabelBMFont* m_replayLabel = nullptr;
+    CCLabelBMFont* m_disabledLbl = nullptr;
+    CCLabelBMFont* m_recordLbl = nullptr;
+    CCLabelBMFont* m_playbackLbl = nullptr;
+    CCMenuItemToggler* m_ignoreToggle = nullptr;
+    int m_replayIndex = 0;
+
+    bool setup() override {
+        this->setTitle("YallBot.");
+        auto sz = m_mainLayer->getContentSize();
+        float cx = sz.width / 2;
+        float top = sz.height - 30.f;
+
+        // ── Mode radio buttons ────────────────────────────────────────────
+        auto modeMenu = CCMenu::create();
+        modeMenu->setPosition({ cx, top - 20.f });
+        m_mainLayer->addChild(modeMenu);
+
+        m_disabledLbl = CCLabelBMFont::create("Disabled", "bigFont.fnt");
+        m_disabledLbl->setScale(0.4f);
+        auto disabledBtn = CCMenuItemLabel::create(
+            m_disabledLbl, this, menu_selector(YallBotPopup::onDisabled)
+        );
+
+        m_recordLbl = CCLabelBMFont::create("Record", "bigFont.fnt");
+        m_recordLbl->setScale(0.4f);
+        auto recordBtn = CCMenuItemLabel::create(
+            m_recordLbl, this, menu_selector(YallBotPopup::onRecord)
+        );
+
+        m_playbackLbl = CCLabelBMFont::create("Playback", "bigFont.fnt");
+        m_playbackLbl->setScale(0.4f);
+        auto playbackBtn = CCMenuItemLabel::create(
+            m_playbackLbl, this, menu_selector(YallBotPopup::onPlayback)
+        );
+
+        modeMenu->addChild(disabledBtn);
+        modeMenu->addChild(recordBtn);
+        modeMenu->addChild(playbackBtn);
+        modeMenu->alignItemsHorizontallyWithPadding(14.f);
+
+        this->updateModeColors();
+
+        // ── Replay navigator ──────────────────────────────────────────────
+        auto navBg = CCScale9Sprite::create("square02_small.png");
+        navBg->setContentSize({ 200.f, 28.f });
+        navBg->setOpacity(80);
+        navBg->setPosition({ cx, top - 58.f });
+        m_mainLayer->addChild(navBg);
+
+        auto navMenu = CCMenu::create();
+        navMenu->setPosition({ cx, top - 58.f });
+        m_mainLayer->addChild(navMenu);
+
+        auto leftSpr = CCSprite::createWithSpriteFrameName("GJ_arrow_01_001.png");
+        leftSpr->setScale(0.5f);
+        auto leftBtn = CCMenuItemSpriteExtra::create(
+            leftSpr, this, menu_selector(YallBotPopup::onPrev)
+        );
+
+        m_replayLabel = CCLabelBMFont::create(
+            this->currentReplayName().c_str(), "chatFont.fnt"
+        );
+        m_replayLabel->setScale(0.55f);
+        m_replayLabel->limitLabelWidth(130.f, 0.55f, 0.1f);
+        auto replayLabelItem = CCMenuItemLabel::create(m_replayLabel, this, nullptr);
+
+        auto rightSpr = CCSprite::createWithSpriteFrameName("GJ_arrow_01_001.png");
+        rightSpr->setFlipX(true);
+        rightSpr->setScale(0.5f);
+        auto rightBtn = CCMenuItemSpriteExtra::create(
+            rightSpr, this, menu_selector(YallBotPopup::onNext)
+        );
+
+        navMenu->addChild(leftBtn);
+        navMenu->addChild(replayLabelItem);
+        navMenu->addChild(rightBtn);
+        navMenu->alignItemsHorizontallyWithPadding(6.f);
+
+        // ── Ignore Inputs toggle ──────────────────────────────────────────
+        auto ignoreMenu = CCMenu::create();
+        ignoreMenu->setPosition({ cx - 10.f, top - 90.f });
+        m_mainLayer->addChild(ignoreMenu);
+
+        m_ignoreToggle = CCMenuItemToggler::createWithStandardSprites(
+            this, menu_selector(YallBotPopup::onIgnoreInputs)
+        );
+        m_ignoreToggle->toggle(MacroManager::get().ignoreInputs);
+        m_ignoreToggle->setScale(0.65f);
+
+        auto ignoreLbl = CCLabelBMFont::create("Ignore Inputs", "bigFont.fnt");
+        ignoreLbl->setScale(0.38f);
+        auto ignoreLblItem = CCMenuItemLabel::create(
+            ignoreLbl, this, menu_selector(YallBotPopup::onIgnoreInputsLabel)
+        );
+
+        ignoreMenu->addChild(m_ignoreToggle);
+        ignoreMenu->addChild(ignoreLblItem);
+        ignoreMenu->alignItemsHorizontallyWithPadding(4.f);
+
+        // ── Action buttons ────────────────────────────────────────────────
+        auto btnMenu = CCMenu::create();
+        btnMenu->setPosition({ cx, top - 130.f });
+        m_mainLayer->addChild(btnMenu);
+
+        btnMenu->addChild(this->makeBtn("New",    menu_selector(YallBotPopup::onNew)));
+        btnMenu->addChild(this->makeBtn("Save",   menu_selector(YallBotPopup::onSave)));
+        btnMenu->addChild(this->makeBtn("Load",   menu_selector(YallBotPopup::onLoad)));
+        btnMenu->addChild(this->makeBtn("Delete", menu_selector(YallBotPopup::onDelete)));
+        btnMenu->alignItemsHorizontallyWithPadding(5.f);
+
+        return true;
+    }
+
+    CCMenuItemSpriteExtra* makeBtn(const char* text, SEL_MenuHandler sel) {
+        auto bg = CCScale9Sprite::create("GJ_button_04.png");
+        bg->setContentSize({ 68.f, 28.f });
+        auto lbl = CCLabelBMFont::create(text, "bigFont.fnt");
+        lbl->setScale(0.38f);
+        lbl->setPosition(bg->getContentSize() / 2);
+        bg->addChild(lbl);
+        return CCMenuItemSpriteExtra::create(bg, this, sel);
+    }
+
+    std::string currentReplayName() {
+        auto list = MacroManager::get().getReplayList();
+        if (list.empty()) return "no replays";
+        if (m_replayIndex >= (int)list.size()) m_replayIndex = 0;
+        return list[m_replayIndex];
+    }
+
+    void updateModeColors() {
+        auto& bot = MacroManager::get();
+        // Grey out all, highlight active
+        ccColor3B grey   = { 150, 150, 150 };
+        ccColor3B white  = { 255, 255, 255 };
+        ccColor3B green  = { 100, 255, 100 };
+        ccColor3B yellow = { 255, 220, 50  };
+
+        m_disabledLbl->setColor(bot.state == BotState::Idle     ? white  : grey);
+        m_recordLbl->setColor  (bot.state == BotState::Recording ? green  : grey);
+        m_playbackLbl->setColor(bot.state == BotState::Playing   ? yellow : grey);
+    }
+
+    // ── Callbacks ─────────────────────────────────────────────────────────────
+
+    void onDisabled(CCObject*) {
+        MacroManager::get().stopRecording();
+        MacroManager::get().stopPlayback();
+        this->updateModeColors();
+    }
+
+    void onRecord(CCObject*) {
+        MacroManager::get().startRecording();
+        this->updateModeColors();
+    }
+
+    void onPlayback(CCObject*) {
+        MacroManager::get().startPlayback();
+        this->updateModeColors();
+    }
+
+    void onPrev(CCObject*) {
+        auto list = MacroManager::get().getReplayList();
+        if (list.empty()) return;
+        m_replayIndex = (m_replayIndex - 1 + list.size()) % list.size();
+        m_replayLabel->setString(list[m_replayIndex].c_str());
+    }
+
+    void onNext(CCObject*) {
+        auto list = MacroManager::get().getReplayList();
+        if (list.empty()) return;
+        m_replayIndex = (m_replayIndex + 1) % list.size();
+        m_replayLabel->setString(list[m_replayIndex].c_str());
+    }
+
+    void onIgnoreInputs(CCObject*) {
+        MacroManager::get().ignoreInputs = !MacroManager::get().ignoreInputs;
+    }
+
+    void onIgnoreInputsLabel(CCObject*) {
+        MacroManager::get().ignoreInputs = !MacroManager::get().ignoreInputs;
+        m_ignoreToggle->toggle(MacroManager::get().ignoreInputs);
+    }
+
+    void onNew(CCObject*) {
+        MacroManager::get().clearMacro();
+        FLAlertLayer::create("YallBot.", "New macro created!", "OK")->show();
+    }
+
+    void onSave(CCObject*) {
+        auto& bot = MacroManager::get();
+        if (bot.inputs.empty()) {
+            FLAlertLayer::create("YallBot.", "Nothing to save!", "OK")->show();
+            return;
+        }
+        std::string name = "macro_" + std::to_string(bot.inputs.size());
+        bot.saveMacro(name);
+        if (m_replayLabel)
+            m_replayLabel->setString(this->currentReplayName().c_str());
+        FLAlertLayer::create("YallBot.", ("Saved: " + name).c_str(), "OK")->show();
+    }
+
+    void onLoad(CCObject*) {
+        auto list = MacroManager::get().getReplayList();
+        if (list.empty()) {
+            FLAlertLayer::create("YallBot.", "No replays found!", "OK")->show();
+            return;
+        }
+        MacroManager::get().loadMacro(list[m_replayIndex]);
+        FLAlertLayer::create("YallBot.", ("Loaded: " + list[m_replayIndex]).c_str(), "OK")->show();
+    }
+
+    void onDelete(CCObject*) {
+        auto list = MacroManager::get().getReplayList();
+        if (list.empty()) return;
+        std::string name = list[m_replayIndex];
+        MacroManager::get().deleteMacro(name);
+        m_replayIndex = 0;
+        if (m_replayLabel)
+            m_replayLabel->setString(this->currentReplayName().c_str());
+    }
+
+public:
+    static YallBotPopup* create() {
+        auto ret = new YallBotPopup();
+        if (ret->initAnchored(310.f, 230.f)) {
+            ret->autorelease();
+            return ret;
+        }
+        delete ret;
+        return nullptr;
+    }
+};
 
 // ── Input hooks ───────────────────────────────────────────────────────────────
 
 class $modify(GJBaseGameLayer) {
     void handleButton(bool push, int button, bool player1) {
-        MacroManager::get().onInput(button, !player1, push);
+        auto& bot = MacroManager::get();
+        if (bot.state == BotState::Playing && bot.ignoreInputs) {
+            // Don't pass real inputs through during playback
+        } else {
+            bot.onInput(button, !player1, push);
+            GJBaseGameLayer::handleButton(push, button, player1);
+            return;
+        }
         GJBaseGameLayer::handleButton(push, button, player1);
     }
 
@@ -41,13 +288,9 @@ class $modify(PlayLayer) {
     }
 };
 
-// ── Pause menu UI ─────────────────────────────────────────────────────────────
+// ── Pause menu button ─────────────────────────────────────────────────────────
 
 class $modify(YallBotPauseLayer, PauseLayer) {
-    struct Fields {
-        CCLabelBMFont* statusLabel = nullptr;
-    };
-
     void customSetup() {
         PauseLayer::customSetup();
 
@@ -55,109 +298,26 @@ class $modify(YallBotPauseLayer, PauseLayer) {
 
         auto winSize = CCDirector::sharedDirector()->getWinSize();
 
-        // ── Background panel ─────────────────────────────────────────────────
-        auto bg = CCScale9Sprite::create("square02_small.png");
-        bg->setContentSize({ 180.f, 80.f });
-        bg->setOpacity(180);
-        bg->setColor({ 0, 0, 0 });
-        bg->setPosition({ winSize.width / 2, 55.f });
-        bg->setZOrder(10);
-        this->addChild(bg);
-
-        // ── Title ────────────────────────────────────────────────────────────
-        auto title = CCLabelBMFont::create("YallBot.", "goldFont.fnt");
-        title->setScale(0.55f);
-        title->setPosition({ winSize.width / 2, 84.f });
-        title->setZOrder(11);
-        this->addChild(title);
-
-        // ── Status label ─────────────────────────────────────────────────────
-        m_fields->statusLabel = CCLabelBMFont::create(
-            this->getStatusText().c_str(), "chatFont.fnt"
-        );
-        m_fields->statusLabel->setScale(0.5f);
-        m_fields->statusLabel->setPosition({ winSize.width / 2, 63.f });
-        m_fields->statusLabel->setZOrder(11);
-        this->addChild(m_fields->statusLabel);
-
-        // ── Buttons menu ─────────────────────────────────────────────────────
         auto menu = CCMenu::create();
-        menu->setPosition({ winSize.width / 2, 40.f });
-        menu->setZOrder(11);
+        menu->setPosition({ winSize.width / 2, 22.f });
+        menu->setZOrder(10);
         this->addChild(menu);
 
-        auto actionLbl = CCLabelBMFont::create(
-            this->getActionText().c_str(), "bigFont.fnt"
+        auto bg = CCScale9Sprite::create("GJ_button_04.png");
+        bg->setContentSize({ 100.f, 26.f });
+
+        auto lbl = CCLabelBMFont::create("YallBot.", "bigFont.fnt");
+        lbl->setScale(0.4f);
+        lbl->setPosition(bg->getContentSize() / 2);
+        bg->addChild(lbl);
+
+        auto btn = CCMenuItemSpriteExtra::create(
+            bg, this, menu_selector(YallBotPauseLayer::onOpenYallBot)
         );
-        actionLbl->setScale(0.4f);
-        auto actionBtn = CCMenuItemLabel::create(
-            actionLbl, this,
-            menu_selector(YallBotPauseLayer::onToggle)
-        );
-
-        auto clearLbl = CCLabelBMFont::create("Clear", "bigFont.fnt");
-        clearLbl->setScale(0.4f);
-        auto clearBtn = CCMenuItemLabel::create(
-            clearLbl, this,
-            menu_selector(YallBotPauseLayer::onClear)
-        );
-        clearBtn->setColor({ 255, 100, 100 });
-
-        menu->addChild(actionBtn);
-        menu->addChild(clearBtn);
-        menu->alignItemsHorizontallyWithPadding(12.f);
+        menu->addChild(btn);
     }
 
-    std::string getStatusText() {
-        auto& bot = MacroManager::get();
-        switch (bot.state) {
-            case BotState::Idle:
-                return "Idle | Inputs: " + std::to_string(bot.inputs.size());
-            case BotState::Recording:
-                return "REC | Frame: " + std::to_string(bot.currentFrame);
-            case BotState::Playing:
-                return "PLAY | Frame: " + std::to_string(bot.currentFrame);
-        }
-        return "Idle";
-    }
-
-    std::string getActionText() {
-        auto& bot = MacroManager::get();
-        switch (bot.state) {
-            case BotState::Idle:
-                return bot.inputs.empty() ? "Record" : "Play";
-            case BotState::Recording:
-                return "Stop Rec";
-            case BotState::Playing:
-                return "Stop Play";
-        }
-        return "Record";
-    }
-
-    void onToggle(CCObject*) {
-        auto& bot = MacroManager::get();
-        switch (bot.state) {
-            case BotState::Idle:
-                if (!bot.inputs.empty()) bot.startPlayback();
-                else bot.startRecording();
-                break;
-            case BotState::Recording:
-                bot.stopRecording();
-                bot.saveMacro("macro_" + std::to_string(bot.inputs.size()));
-                break;
-            case BotState::Playing:
-                bot.stopPlayback();
-                break;
-        }
-        if (m_fields->statusLabel) {
-            m_fields->statusLabel->setString(this->getStatusText().c_str());
-        }
-    }
-
-    void onClear(CCObject*) {
-        MacroManager::get().clearMacro();
-        if (m_fields->statusLabel) {
-            m_fields->statusLabel->setString(this->getStatusText().c_str());
-        }
+    void onOpenYallBot(CCObject*) {
+        YallBotPopup::create()->show();
     }
 };
