@@ -6,7 +6,7 @@
 
 using namespace geode::prelude;
 
-// ── Hook handleButton (GD 2.2+ API) ──────────────────────────────────────────
+// ── Input hooks ───────────────────────────────────────────────────────────────
 
 class $modify(GJBaseGameLayer) {
     void handleButton(bool push, int button, bool player1) {
@@ -20,7 +20,7 @@ class $modify(GJBaseGameLayer) {
     }
 };
 
-// ── Reset on death/restart ────────────────────────────────────────────────────
+// ── Reset on death ────────────────────────────────────────────────────────────
 
 class $modify(PlayLayer) {
     void resetLevel() {
@@ -41,63 +41,106 @@ class $modify(PlayLayer) {
     }
 };
 
-// ── Pause menu UI — name the class explicitly so menu_selector works ──────────
+// ── Pause menu UI ─────────────────────────────────────────────────────────────
 
 class $modify(YallBotPauseLayer, PauseLayer) {
-    void customSetup() {
-        PauseLayer::customSetup();
+    struct Fields {
+        CCLabelBMFont* statusLabel = nullptr;
+    };
 
-        if (!Mod::get()->getSettingValue<bool>("show-ui-button")) return;
+    bool init() {
+        if (!PauseLayer::init()) return false;
+
+        if (!Mod::get()->getSettingValue<bool>("show-ui-button")) return true;
 
         auto winSize = CCDirector::sharedDirector()->getWinSize();
-
-        auto label = CCLabelBMFont::create("YallBot.", "bigFont.fnt");
-        label->setScale(0.5f);
-
-        auto btn = CCMenuItemLabel::create(
-            label, this,
-            menu_selector(YallBotPauseLayer::onYallBotMenu)
-        );
-
-        auto menu = CCMenu::create();
-        menu->addChild(btn);
-        menu->setPosition(winSize.width / 2, 20.f);
-        this->addChild(menu, 10);
-    }
-
-    void onYallBotMenu(CCObject*) {
         auto& bot = MacroManager::get();
 
-        std::string txt;
-        switch (bot.state) {
-            case BotState::Idle:
-                txt = "<cr>Status: Idle</c>\n\nInputs: ";
-                txt += std::to_string(bot.inputs.size());
-                txt += "\n\nToggle to ";
-                txt += bot.inputs.empty() ? "<cg>Record</c>" : "<cy>Playback</c>";
-                break;
-            case BotState::Recording:
-                txt = "<cg>Recording...</c>\n\nFrame: ";
-                txt += std::to_string(bot.currentFrame);
-                txt += "\nInputs: ";
-                txt += std::to_string(bot.inputs.size());
-                txt += "\n\nToggle to <cr>Stop</c>";
-                break;
-            case BotState::Playing:
-                txt = "<cy>Playing back...</c>\n\nFrame: ";
-                txt += std::to_string(bot.currentFrame);
-                txt += "\n\nToggle to <cr>Stop</c>";
-                break;
-        }
+        // ── Background panel ─────────────────────────────────────────────────
+        auto bg = CCScale9Sprite::create("square02_small.png");
+        bg->setContentSize({ 180.f, 80.f });
+        bg->setOpacity(180);
+        bg->setColor({ 0, 0, 0 });
+        bg->setPosition({ winSize.width / 2, 55.f });
+        bg->setZOrder(10);
+        this->addChild(bg);
 
-        auto alert = FLAlertLayer::create(
-            this, "YallBot.", txt.c_str(), "Close", "Toggle", 300.f
+        // ── Title ────────────────────────────────────────────────────────────
+        auto title = CCLabelBMFont::create("YallBot.", "goldFont.fnt");
+        title->setScale(0.55f);
+        title->setPosition({ winSize.width / 2, 84.f });
+        title->setZOrder(11);
+        this->addChild(title);
+
+        // ── Status label ─────────────────────────────────────────────────────
+        m_fields->statusLabel = CCLabelBMFont::create(
+            this->getStatusText().c_str(), "chatFont.fnt"
         );
-        alert->show();
+        m_fields->statusLabel->setScale(0.5f);
+        m_fields->statusLabel->setPosition({ winSize.width / 2, 63.f });
+        m_fields->statusLabel->setZOrder(11);
+        this->addChild(m_fields->statusLabel);
+
+        // ── Buttons menu ─────────────────────────────────────────────────────
+        auto menu = CCMenu::create();
+        menu->setPosition({ winSize.width / 2, 40.f });
+        menu->setZOrder(11);
+        this->addChild(menu);
+
+        // Record / Play / Stop button
+        auto actionLbl = CCLabelBMFont::create(
+            this->getActionText().c_str(), "bigFont.fnt"
+        );
+        actionLbl->setScale(0.4f);
+        auto actionBtn = CCMenuItemLabel::create(
+            actionLbl, this,
+            menu_selector(YallBotPauseLayer::onToggle)
+        );
+        actionBtn->setTag(1);
+
+        // Clear button
+        auto clearLbl = CCLabelBMFont::create("Clear", "bigFont.fnt");
+        clearLbl->setScale(0.4f);
+        auto clearBtn = CCMenuItemLabel::create(
+            clearLbl, this,
+            menu_selector(YallBotPauseLayer::onClear)
+        );
+        clearBtn->setColor({ 255, 100, 100 });
+
+        menu->addChild(actionBtn);
+        menu->addChild(clearBtn);
+        menu->alignItemsHorizontallyWithPadding(12.f);
+
+        return true;
     }
 
-    void FLAlert_Clicked(FLAlertLayer*, bool btn2) {
-        if (!btn2) return;
+    std::string getStatusText() {
+        auto& bot = MacroManager::get();
+        switch (bot.state) {
+            case BotState::Idle:
+                return "Idle | Inputs: " + std::to_string(bot.inputs.size());
+            case BotState::Recording:
+                return "REC | Frame: " + std::to_string(bot.currentFrame);
+            case BotState::Playing:
+                return "PLAY | Frame: " + std::to_string(bot.currentFrame);
+        }
+        return "Idle";
+    }
+
+    std::string getActionText() {
+        auto& bot = MacroManager::get();
+        switch (bot.state) {
+            case BotState::Idle:
+                return bot.inputs.empty() ? "Record" : "Play";
+            case BotState::Recording:
+                return "Stop Rec";
+            case BotState::Playing:
+                return "Stop Play";
+        }
+        return "Record";
+    }
+
+    void onToggle(CCObject*) {
         auto& bot = MacroManager::get();
         switch (bot.state) {
             case BotState::Idle:
@@ -111,6 +154,21 @@ class $modify(YallBotPauseLayer, PauseLayer) {
             case BotState::Playing:
                 bot.stopPlayback();
                 break;
+        }
+        // Update labels after toggle
+        if (m_fields->statusLabel) {
+            m_fields->statusLabel->setString(this->getStatusText().c_str());
+        }
+        // Update action button label
+        if (auto menu = this->getChildByTag(11)) {
+            // refresh
+        }
+    }
+
+    void onClear(CCObject*) {
+        MacroManager::get().clearMacro();
+        if (m_fields->statusLabel) {
+            m_fields->statusLabel->setString(this->getStatusText().c_str());
         }
     }
 };
