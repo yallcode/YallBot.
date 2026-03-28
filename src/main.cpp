@@ -18,8 +18,8 @@ protected:
     int m_replayIndex = 0;
 
     bool init() {
-        if (!FLAlertLayer::init(nullptr, "YallBot.", "", "Close", nullptr, 310.f)) 
-            return false;
+        if (!FLAlertLayer::init(nullptr, "YallBot.", "", "Close", nullptr, 310.f, false, 230.f, 1.0f)) 
+    return false;
 
         auto bg = m_mainLayer;
         auto sz = bg->getContentSize();
